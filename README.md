@@ -262,3 +262,4 @@ Please consider to use Issues.
 * Adobe Flash Video File Format Specification Version 10.1
   * http://download.macromedia.com/f4v/video_file_format_spec_v10_1.pdf
 
+# ios-rtmp-client
