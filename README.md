@@ -1,7 +1,5 @@
 # IOS-RTMP-Client
 
-# Snu test :: IOS-RTMP-Client
-
 > #### 원격 시험 감독 - 아이폰용 클라이언트
 >
 > developer : [Jihye-Back](https://github.com/happy-jihye)
