@@ -4,7 +4,7 @@
 >
 > developer : [Jihye-Back](https://github.com/happy-jihye)
 
-- You can [(downLoad Zip File)](https://drive.google.com/file/d/1l1yFI9HbmZkCa9CycYoJ8Xp4Po-cO_sq/view?usp=sharing)
+- You can [downLoad Zip Fil](https://drive.google.com/file/d/1l1yFI9HbmZkCa9CycYoJ8Xp4Po-cO_sq/view?usp=sharing)
 - [감독관용 뷰어](https://github.com/SSAI-Remote-Proctor/Snu-Remote-Test-Supervision-RTMP-HLS-ver2)
 - [RestAPI](https://github.com/younghoSNU/restapi)
 
