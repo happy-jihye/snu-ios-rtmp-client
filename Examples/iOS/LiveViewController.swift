@@ -146,7 +146,7 @@ class LiveViewController: UIViewController {
         if publish.isSelected {
             
             // Curl Command
-            let url = URL(string: "http://3.35.240.138:3333/streaming_termination")
+            let url = URL(string: "http://XXXX/streaming_termination")
 
             guard let requestUrl = url else { fatalError() }
             var request = URLRequest(url: requestUrl)
@@ -171,7 +171,7 @@ class LiveViewController: UIViewController {
         } else {
 
             // Curl Command
-            let url = URL(string: "http://3.35.240.138:3333/streaming_start")
+            let url = URL(string: "http://XXXX/streaming_start")
 
             guard let requestUrl = url else { fatalError() }
             var request = URLRequest(url: requestUrl)

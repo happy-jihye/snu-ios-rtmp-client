@@ -87,7 +87,7 @@ class LoginViewController: UIViewController {
                     let paramData = param.data(using: .utf8)
 
                     // 2. URL 객체 정의
-                    let url = URL(string: "http://3.35.240.138:3333/return_endpoint")
+                    let url = URL(string: "http://XXXX/return_endpoint")
 
                     // 3. URLRequest 객체를 정의하고, 요청 내용을 담는다.
                     guard let requestUrl = url else { fatalError() }

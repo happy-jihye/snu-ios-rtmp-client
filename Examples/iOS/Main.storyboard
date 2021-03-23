@@ -117,13 +117,6 @@
                                     <action selector="Login_func:" destination="o8s-FI-hl2" eventType="touchUpInside" id="0kD-8t-Em9"/>
                                 </connections>
                             </button>
-                            <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" fixedFrame="YES" text="label" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="3ra-hb-xsm" userLabel="LoginResult">
-                                <rect key="frame" x="188" y="574" width="70" height="63"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                                <fontDescription key="fontDescription" type="system" pointSize="17"/>
-                                <nil key="textColor"/>
-                                <nil key="highlightedColor"/>
-                            </label>
                         </subviews>
                         <color key="backgroundColor" systemColor="systemBackgroundColor"/>
                     </view>
@@ -132,7 +125,6 @@
                         <outlet property="LoginButton" destination="daK-HU-yjt" id="2WM-Nd-oFh"/>
                         <outlet property="LoginName" destination="kFw-3E-QRs" id="Gx3-oF-nNh"/>
                         <outlet property="LoginNum" destination="8WV-VK-FSK" id="CUy-zg-zBE"/>
-                        <outlet property="LoginResult" destination="3ra-hb-xsm" id="px2-9Y-Bd1"/>
                     </connections>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="hwg-y6-7zU" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
