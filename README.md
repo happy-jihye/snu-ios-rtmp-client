@@ -263,3 +263,4 @@ Please consider to use Issues.
   * http://download.macromedia.com/f4v/video_file_format_spec_v10_1.pdf
 
 # ios-rtmp-client
+# snu-ios-rtmp-client
