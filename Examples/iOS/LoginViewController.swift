@@ -78,16 +78,13 @@ class LoginViewController: UIViewController {
                 else{
                     self.login_success = true
                     
-                    let test_data = dataString.split(separator: "_")
-                    let data = test_data[0] + "." + test_data[1] + "_" + test_data[2]
-                    print("\ndata : \(data)")
                     
-                    let param = "num=\(num)&name=\(name)&lec_id=\(data)&mac=0" // key1=value&key2=value...
+                    let param = "num=\(num)&name=\(name)&tablename=\(dataString)&mac=0" // key1=value&key2=value...
                     Preference.defaultInstance.data = param
                     let paramData = param.data(using: .utf8)
 
                     // 2. URL 객체 정의
-                    let url = URL(string: "http://XXXX/return_endpoint")
+                    let url = URL(string: "http://3.35.240.138:3333/return_endpoint")
 
                     // 3. URLRequest 객체를 정의하고, 요청 내용을 담는다.
                     guard let requestUrl = url else { fatalError() }
@@ -103,14 +100,19 @@ class LoginViewController: UIViewController {
 
                     let task2 = URLSession.shared.dataTask(with: request) { data, response, error in
                                           
-                        if let data = data, let rtmp_uri = String(data: data, encoding: .utf8) {
+                        if let data = data {
+                            
+//                            print("json data: \(data)")
+                            
+                        
+                            guard let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String : Any] else { return}
+                            guard let rtmp_uri = json["0"] as? String else { return }
+                           
                             let rtmp_arr = rtmp_uri.split(separator: "/")
-                            print("rtmp : \(rtmp_arr[2]) \n \(rtmp_arr[3])")
                             
                             Preference.defaultInstance.uri = "rtmp://3.35.240.138/channel2/"
                             Preference.defaultInstance.streamName =  String(rtmp_arr[3])
-                            print("\n\(Preference.defaultInstance.uri)")
-                            print("\n\(Preference.defaultInstance.streamName)")
+
                             
                             semaphore.signal()
                         }
@@ -135,7 +137,7 @@ class LoginViewController: UIViewController {
             if #available(iOS 13.0, *) {
                 let story = UIStoryboard(name: "Main", bundle: nil)
                 let controller = story.instantiateViewController(identifier: "Main") as! LiveViewController
-                self.present(controller, animated: true, completion: nil)
+                self.navigationController?.pushViewController(controller, animated: true)
                 
             }
             self.login_success = false
