@@ -3,6 +3,9 @@ import HaishinKit
 import Photos
 import UIKit
 import VideoToolbox
+import Vision
+import CoreMedia
+
 
 final class ExampleRecorderDelegate: DefaultAVRecorderDelegate {
     static let `default` = ExampleRecorderDelegate()
@@ -25,8 +28,41 @@ final class ExampleRecorderDelegate: DefaultAVRecorderDelegate {
 
 class LiveViewController: UIViewController {
     private static let maxRetryCount: Int = 5
+    
+    var isPublishing: Bool = false
+    
+    let OBJECT_CLASSES = ["person","tv","laptop","mouse","remote","keyboard","cell phone","book"]
+    
+    
+    // VISION PROPERTIES
+    // MARK: - Vision Properties
+    var request: VNCoreMLRequest?
+    var visionModel: VNCoreMLModel?
+    var isInferencing = false
+    
+    // MARK: - AV Property
+    var videoCapture: VideoCapture!
+    let semaphore = DispatchSemaphore(value: 1)
+    var lastExecution = Date()
+    
+    // MARK: - Data
+    var filteredPredictions: [DetectedObject] = []
+    var newFilteredPredictions: [DetectedObject] = []
+    var objectLabelList: [String] = []
+    var newObjectLabelList: [String] = []
+    var frameW: CGFloat = 480
+    var frameH: CGFloat = 640
+    @IBOutlet weak var videoPreview: UIView!
+    
+    
+    
+    
 
-    @IBOutlet private weak var lfView: MTHKView!
+    
+    
+    let objectDectectionModel = MobileNetV2_SSDLite()
+
+ 
     @IBOutlet private weak var currentFPSLabel: UILabel!
     @IBOutlet private weak var publishButton: UIButton!
     @IBOutlet private weak var pauseButton: UIButton!
@@ -83,19 +119,37 @@ class LiveViewController: UIViewController {
         NotificationCenter.default.addObserver(self, selector: #selector(on(_:)), name: UIDevice.orientationDidChangeNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(didEnterBackground(_:)), name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(didBecomeActive(_:)), name: UIApplication.didBecomeActiveNotification, object: nil)
+        
+        // Object Detection
+        setUpModel()
+        setUpCamera()
+        frameW = videoPreview.frame.width
+        frameH = videoPreview.frame.height
+    
+    }
+    
+    public override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        resizePreviewLayer()
+    }
+    
+    func resizePreviewLayer() {
+        videoCapture.previewLayer?.frame = videoPreview.bounds
     }
 
-    override func viewWillAppear(_ animated: Bool) {
+    public override func viewWillAppear(_ animated: Bool) {
         logger.info("viewWillAppear")
         super.viewWillAppear(animated)
         rtmpStream.attachAudio(AVCaptureDevice.default(for: .audio)) { error in
             logger.warn(error.description)
         }
-        rtmpStream.attachCamera(DeviceUtil.device(withPosition: currentPosition)) { error in
-            logger.warn(error.description)
-        }
+        rtmpStream.attachScreen(videoCapture.captureSession as? CustomCaptureSession)
+        
+//        rtmpStream.attachCamera(DeviceUtil.device(withPosition: currentPosition)) { error in
+//            logger.warn(error.description)
+//        }
         rtmpStream.addObserver(self, forKeyPath: "currentFPS", options: .new, context: nil)
-        lfView?.attachStream(rtmpStream)
+        
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -145,8 +199,10 @@ class LiveViewController: UIViewController {
     @IBAction func on(publish: UIButton) {
         if publish.isSelected {
             
+            isPublishing = false
+            
             // Curl Command
-            let url = URL(string: "http://XXXX/streaming_termination")
+            let url = URL(string: "http://3.35.240.138:3333/streaming_termination")
 
             guard let requestUrl = url else { fatalError() }
             var request = URLRequest(url: requestUrl)
@@ -168,24 +224,29 @@ class LiveViewController: UIViewController {
             rtmpConnection.removeEventListener(.rtmpStatus, selector: #selector(rtmpStatusHandler), observer: self)
             rtmpConnection.removeEventListener(.ioError, selector: #selector(rtmpErrorHandler), observer: self)
             publish.setTitle("▶", for: [])
+            
         } else {
 
             // Curl Command
-            let url = URL(string: "http://XXXX/streaming_start")
-
-            guard let requestUrl = url else { fatalError() }
-            var request = URLRequest(url: requestUrl)
-            request.httpMethod = "POST"
             
-            let data = Preference.defaultInstance.data
-            request.httpBody = data?.data(using: .utf8)
-                
-            request.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-            request.setValue(String(Preference.defaultInstance.data!.count), forHTTPHeaderField: "Content-Length")
+            isPublishing = true
             
-            let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            }
-            task.resume()
+//            let url = URL(string: "http://3.35.240.138:3333/streaming_start")
+//
+//
+//            guard let requestUrl = url else { fatalError() }
+//            var request = URLRequest(url: requestUrl)
+//            request.httpMethod = "POST"
+//
+//            let data = Preference.defaultInstance.data
+//            request.httpBody = data?.data(using: .utf8)
+//
+//            request.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+//            request.setValue(String(Preference.defaultInstance.data!.count), forHTTPHeaderField: "Content-Length")
+//
+//            let task = URLSession.shared.dataTask(with: request) { data, response, error in
+//            }
+//            task.resume()
             
             
             UIApplication.shared.isIdleTimerDisabled = true
@@ -294,3 +355,159 @@ class LiveViewController: UIViewController {
     }
 
 }
+
+
+
+extension LiveViewController {
+
+    
+    // MARK: - Setup Core ML
+    func setUpModel() {
+        if let visionModel = try? VNCoreMLModel(for: objectDectectionModel.model) {
+            self.visionModel = visionModel
+            request = VNCoreMLRequest(model: visionModel, completionHandler: visionRequestDidComplete)
+            request?.imageCropAndScaleOption = .scaleFill
+        } else {
+            fatalError("fail to create vision model")
+        }
+    }
+
+    // MARK: - SetUp Video
+    func setUpCamera() {
+        videoCapture = VideoCapture()
+        videoCapture.delegate = self
+        videoCapture.fps = 30
+        videoCapture.setUp(sessionPreset: .vga640x480) { success in
+            
+            if success {
+                // add preview view on the layer
+                if let previewLayer = self.videoCapture.previewLayer {
+                    self.videoPreview.layer.addSublayer(previewLayer)
+                    self.resizePreviewLayer()
+                }
+                
+                // start video preview when setup is done
+                self.videoCapture.start()
+            }
+        }
+    }
+
+    
+}
+
+
+// MARK: - VideoCaptureDelegate
+extension LiveViewController: VideoCaptureDelegate {
+    func videoCapture(_ capture: VideoCapture, didCaptureVideoFrame pixelBuffer: CVPixelBuffer?, timestamp: CMTime) {
+        // the captured image from camera is contained on pixelBuffer
+        
+        if isPublishing {
+            
+            if !self.isInferencing, let pixelBuffer = pixelBuffer {
+                self.isInferencing = true
+                
+                // predict!
+                self.predictUsingVision(pixelBuffer: pixelBuffer)
+            }
+            
+        }
+        
+    }
+}
+
+extension LiveViewController {
+    func predictUsingVision(pixelBuffer: CVPixelBuffer) {
+        guard let request = request else { fatalError() }
+        // vision framework configures the input size of image following our model's input configuration automatically
+        self.semaphore.wait()
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer)
+        try? handler.perform([request])
+    }
+    
+    // MARK: - Post-processing
+    func visionRequestDidComplete(request: VNRequest, error: Error?) {
+        if let predictions = request.results as? [VNRecognizedObjectObservation] {
+            
+            var label: String = ""
+
+            newFilteredPredictions.removeAll()
+            newObjectLabelList.removeAll()
+
+            predictions.forEach { foundObject in
+                
+                label = foundObject.labels.first?.identifier ?? ""
+                
+                if label != "" && OBJECT_CLASSES.contains(label) && foundObject.confidence >= 0.6 {
+                    
+                    newFilteredPredictions.append(DetectedObject(prediction:foundObject, frameW: frameW, frameH: frameH))
+                    newObjectLabelList.append(label)
+                
+                }
+    
+            }
+            
+            newObjectLabelList.sort()
+            objectLabelList.sort()
+            
+            var objects = ""
+            if objectLabelList != newObjectLabelList && !newObjectLabelList.isEmpty {
+                objectLabelList = newObjectLabelList
+                filteredPredictions = newFilteredPredictions
+                
+                filteredPredictions.forEach {
+                    objects += $0.getDescription()
+                    if ($0 != filteredPredictions.last) {
+                        objects += ", "
+                    }
+                }
+                
+                let nowDate = Date()
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "HHmmss"
+                
+                var detectTime = dateFormatter.string(from: nowDate)
+                
+                print(objects)
+                print(detectTime
+                )
+                
+                let param = "\(Preference.defaultInstance.data ?? "")&objects={\(objects)}&detectTime=\(detectTime)"
+                print(param)
+                let paramData = param.data(using: .utf8)
+                
+                let url =  URL(string: "http://3.35.240.138:3333/object_detection")
+                guard let requestUrl = url else { fatalError() }
+                
+                var request = URLRequest(url: requestUrl)
+                request.httpMethod = "POST"
+                request.httpBody = paramData
+                
+                request.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+                request.setValue(String(paramData!.count), forHTTPHeaderField: "Content-Length")
+                
+                URLSession.shared.dataTask(with: request) { (data, response, error) in
+                    guard error == nil else { print(error!.localizedDescription); return }
+                    guard let data = data else { print("Empty data"); return }
+
+                    if let str = String(data: data, encoding: .utf8) {
+                        print(str)
+                    }
+                }.resume()
+                
+                
+                
+            }
+            
+
+            DispatchQueue.main.async {
+                self.isInferencing = false
+            }
+        } else {
+            // end of measure
+            
+            self.isInferencing = false
+        }
+        self.semaphore.signal()
+    }
+}
+
