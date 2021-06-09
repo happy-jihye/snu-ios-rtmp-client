@@ -3,6 +3,9 @@ import HaishinKit
 import Photos
 import UIKit
 import VideoToolbox
+import Vision
+import CoreMedia
+
 
 final class ExampleRecorderDelegate: DefaultAVRecorderDelegate {
     static let `default` = ExampleRecorderDelegate()
@@ -25,8 +28,29 @@ final class ExampleRecorderDelegate: DefaultAVRecorderDelegate {
 
 class LiveViewController: UIViewController {
     private static let maxRetryCount: Int = 5
+    
+    // VISION PROPERTIES
+    // MARK: - Vision Properties
+    var request: VNCoreMLRequest?
+    var visionModel: VNCoreMLModel?
+    var isInferencing = false
+    
+    // MARK: - AV Property
+    var videoCapture: VideoCapture!
+    let semaphore = DispatchSemaphore(value: 1)
+    var lastExecution = Date()
+    
+    // MARK: - TableView Data
+    var predictions: [VNRecognizedObjectObservation] = []
+    @IBOutlet weak var videoPreview: UIView!
+    
+    
+    @IBOutlet weak var boxesView: DrawingBoundingBoxView!
+    
+    
+    let objectDectectionModel = MobileNetV2_SSDLite()
 
-    @IBOutlet private weak var lfView: MTHKView!
+ 
     @IBOutlet private weak var currentFPSLabel: UILabel!
     @IBOutlet private weak var publishButton: UIButton!
     @IBOutlet private weak var pauseButton: UIButton!
@@ -83,19 +107,34 @@ class LiveViewController: UIViewController {
         NotificationCenter.default.addObserver(self, selector: #selector(on(_:)), name: UIDevice.orientationDidChangeNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(didEnterBackground(_:)), name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(didBecomeActive(_:)), name: UIApplication.didBecomeActiveNotification, object: nil)
+        
+        // Object Detection
+        setUpModel()
+        setUpCamera()
+        boxesView.layer.zPosition = 1
+    }
+    
+    public override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        resizePreviewLayer()
+    }
+    
+    func resizePreviewLayer() {
+        videoCapture.previewLayer?.frame = videoPreview.bounds
     }
 
-    override func viewWillAppear(_ animated: Bool) {
+    public override func viewWillAppear(_ animated: Bool) {
         logger.info("viewWillAppear")
         super.viewWillAppear(animated)
         rtmpStream.attachAudio(AVCaptureDevice.default(for: .audio)) { error in
             logger.warn(error.description)
         }
+        rtmpStream.attachScreen(videoCapture.captur)
         rtmpStream.attachCamera(DeviceUtil.device(withPosition: currentPosition)) { error in
             logger.warn(error.description)
         }
         rtmpStream.addObserver(self, forKeyPath: "currentFPS", options: .new, context: nil)
-        lfView?.attachStream(rtmpStream)
+        
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -294,3 +333,90 @@ class LiveViewController: UIViewController {
     }
 
 }
+
+
+
+extension LiveViewController {
+
+    
+    // MARK: - Setup Core ML
+    func setUpModel() {
+        if let visionModel = try? VNCoreMLModel(for: objectDectectionModel.model) {
+            self.visionModel = visionModel
+            request = VNCoreMLRequest(model: visionModel, completionHandler: visionRequestDidComplete)
+            request?.imageCropAndScaleOption = .scaleFill
+        } else {
+            fatalError("fail to create vision model")
+        }
+    }
+
+    // MARK: - SetUp Video
+    func setUpCamera() {
+        videoCapture = VideoCapture()
+        videoCapture.delegate = self
+        videoCapture.fps = 30
+        videoCapture.setUp(sessionPreset: .vga640x480) { success in
+            
+            if success {
+                // add preview view on the layer
+                if let previewLayer = self.videoCapture.previewLayer {
+                    self.videoPreview.layer.addSublayer(previewLayer)
+                    self.resizePreviewLayer()
+                }
+                
+                // start video preview when setup is done
+                self.videoCapture.start()
+            }
+        }
+    }
+
+    
+}
+
+
+// MARK: - VideoCaptureDelegate
+extension LiveViewController: VideoCaptureDelegate {
+    func videoCapture(_ capture: VideoCapture, didCaptureVideoFrame pixelBuffer: CVPixelBuffer?, timestamp: CMTime) {
+        // the captured image from camera is contained on pixelBuffer
+        if !self.isInferencing, let pixelBuffer = pixelBuffer {
+            self.isInferencing = true
+            
+            // predict!
+            self.predictUsingVision(pixelBuffer: pixelBuffer)
+        }
+    }
+}
+
+extension LiveViewController {
+    func predictUsingVision(pixelBuffer: CVPixelBuffer) {
+        guard let request = request else { fatalError() }
+        // vision framework configures the input size of image following our model's input configuration automatically
+        self.semaphore.wait()
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer)
+        try? handler.perform([request])
+    }
+    
+    // MARK: - Post-processing
+    func visionRequestDidComplete(request: VNRequest, error: Error?) {
+        if let predictions = request.results as? [VNRecognizedObjectObservation] {
+//            print(predictions.first?.labels.first?.identifier ?? "nil")
+//            print(predictions.first?.labels.first?.confidence ?? -1)
+            
+            self.predictions = predictions
+            DispatchQueue.main.async {
+                self.boxesView.predictedObjects = predictions
+
+                // end of measure
+
+                
+                self.isInferencing = false
+            }
+        } else {
+            // end of measure
+            
+            self.isInferencing = false
+        }
+        self.semaphore.signal()
+    }
+}
+

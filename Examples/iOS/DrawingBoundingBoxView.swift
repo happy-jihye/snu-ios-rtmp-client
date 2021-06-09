@@ -1,12 +1,10 @@
 //
-//  BoundingBoxView.swift
-//  Example iOS
+//  DrawingBoundingBoxView.swift
+//  SSDMobileNet-CoreML
 //
-//  Created by Subeen Park on 2021/06/04.
-//  Copyright © 2021 Shogo Endo. All rights reserved.
+//  Created by GwakDoyoung on 04/02/2019.
+//  Copyright © 2019 tucan9389. All rights reserved.
 //
-
-// Only for debugging
 
 import UIKit
 import Vision
@@ -81,4 +79,3 @@ extension CGRect {
         return "(\(xStr), \(yStr), \(wStr), \(hStr))"
     }
 }
-
