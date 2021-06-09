@@ -29,6 +29,11 @@ final class ExampleRecorderDelegate: DefaultAVRecorderDelegate {
 class LiveViewController: UIViewController {
     private static let maxRetryCount: Int = 5
     
+    var isPublishing: Bool = false
+    
+    let OBJECT_CLASSES = ["person","tv","laptop","mouse","remote","keyboard","cell phone","book"]
+    
+    
     // VISION PROPERTIES
     // MARK: - Vision Properties
     var request: VNCoreMLRequest?
@@ -40,12 +45,19 @@ class LiveViewController: UIViewController {
     let semaphore = DispatchSemaphore(value: 1)
     var lastExecution = Date()
     
-    // MARK: - TableView Data
-    var predictions: [VNRecognizedObjectObservation] = []
+    // MARK: - Data
+    var filteredPredictions: [DetectedObject] = []
+    var newFilteredPredictions: [DetectedObject] = []
+    var objectLabelList: [String] = []
+    var newObjectLabelList: [String] = []
+    var frameW: CGFloat = 480
+    var frameH: CGFloat = 640
     @IBOutlet weak var videoPreview: UIView!
     
     
-    @IBOutlet weak var boxesView: DrawingBoundingBoxView!
+    
+    
+
     
     
     let objectDectectionModel = MobileNetV2_SSDLite()
@@ -111,7 +123,9 @@ class LiveViewController: UIViewController {
         // Object Detection
         setUpModel()
         setUpCamera()
-        boxesView.layer.zPosition = 1
+        frameW = videoPreview.frame.width
+        frameH = videoPreview.frame.height
+    
     }
     
     public override func viewDidLayoutSubviews() {
@@ -129,10 +143,11 @@ class LiveViewController: UIViewController {
         rtmpStream.attachAudio(AVCaptureDevice.default(for: .audio)) { error in
             logger.warn(error.description)
         }
-        rtmpStream.attachScreen(videoCapture.captur)
-        rtmpStream.attachCamera(DeviceUtil.device(withPosition: currentPosition)) { error in
-            logger.warn(error.description)
-        }
+        rtmpStream.attachScreen(videoCapture.captureSession as? CustomCaptureSession)
+        
+//        rtmpStream.attachCamera(DeviceUtil.device(withPosition: currentPosition)) { error in
+//            logger.warn(error.description)
+//        }
         rtmpStream.addObserver(self, forKeyPath: "currentFPS", options: .new, context: nil)
         
     }
@@ -184,6 +199,8 @@ class LiveViewController: UIViewController {
     @IBAction func on(publish: UIButton) {
         if publish.isSelected {
             
+            isPublishing = false
+            
             // Curl Command
             let url = URL(string: "http://3.35.240.138:3333/streaming_termination")
 
@@ -207,24 +224,29 @@ class LiveViewController: UIViewController {
             rtmpConnection.removeEventListener(.rtmpStatus, selector: #selector(rtmpStatusHandler), observer: self)
             rtmpConnection.removeEventListener(.ioError, selector: #selector(rtmpErrorHandler), observer: self)
             publish.setTitle("▶", for: [])
+            
         } else {
 
             // Curl Command
-            let url = URL(string: "http://3.35.240.138:3333/streaming_start")
-
-            guard let requestUrl = url else { fatalError() }
-            var request = URLRequest(url: requestUrl)
-            request.httpMethod = "POST"
             
-            let data = Preference.defaultInstance.data
-            request.httpBody = data?.data(using: .utf8)
-                
-            request.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-            request.setValue(String(Preference.defaultInstance.data!.count), forHTTPHeaderField: "Content-Length")
+            isPublishing = true
             
-            let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            }
-            task.resume()
+//            let url = URL(string: "http://3.35.240.138:3333/streaming_start")
+//
+//
+//            guard let requestUrl = url else { fatalError() }
+//            var request = URLRequest(url: requestUrl)
+//            request.httpMethod = "POST"
+//
+//            let data = Preference.defaultInstance.data
+//            request.httpBody = data?.data(using: .utf8)
+//
+//            request.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+//            request.setValue(String(Preference.defaultInstance.data!.count), forHTTPHeaderField: "Content-Length")
+//
+//            let task = URLSession.shared.dataTask(with: request) { data, response, error in
+//            }
+//            task.resume()
             
             
             UIApplication.shared.isIdleTimerDisabled = true
@@ -378,12 +400,18 @@ extension LiveViewController {
 extension LiveViewController: VideoCaptureDelegate {
     func videoCapture(_ capture: VideoCapture, didCaptureVideoFrame pixelBuffer: CVPixelBuffer?, timestamp: CMTime) {
         // the captured image from camera is contained on pixelBuffer
-        if !self.isInferencing, let pixelBuffer = pixelBuffer {
-            self.isInferencing = true
+        
+        if isPublishing {
             
-            // predict!
-            self.predictUsingVision(pixelBuffer: pixelBuffer)
+            if !self.isInferencing, let pixelBuffer = pixelBuffer {
+                self.isInferencing = true
+                
+                // predict!
+                self.predictUsingVision(pixelBuffer: pixelBuffer)
+            }
+            
         }
+        
     }
 }
 
@@ -399,16 +427,79 @@ extension LiveViewController {
     // MARK: - Post-processing
     func visionRequestDidComplete(request: VNRequest, error: Error?) {
         if let predictions = request.results as? [VNRecognizedObjectObservation] {
-//            print(predictions.first?.labels.first?.identifier ?? "nil")
-//            print(predictions.first?.labels.first?.confidence ?? -1)
             
-            self.predictions = predictions
-            DispatchQueue.main.async {
-                self.boxesView.predictedObjects = predictions
+            var label: String = ""
 
-                // end of measure
+            newFilteredPredictions.removeAll()
+            newObjectLabelList.removeAll()
 
+            predictions.forEach { foundObject in
                 
+                label = foundObject.labels.first?.identifier ?? ""
+                
+                if label != "" && OBJECT_CLASSES.contains(label) && foundObject.confidence >= 0.6 {
+                    
+                    newFilteredPredictions.append(DetectedObject(prediction:foundObject, frameW: frameW, frameH: frameH))
+                    newObjectLabelList.append(label)
+                
+                }
+    
+            }
+            
+            newObjectLabelList.sort()
+            objectLabelList.sort()
+            
+            var objects = ""
+            if objectLabelList != newObjectLabelList && !newObjectLabelList.isEmpty {
+                objectLabelList = newObjectLabelList
+                filteredPredictions = newFilteredPredictions
+                
+                filteredPredictions.forEach {
+                    objects += $0.getDescription()
+                    if ($0 != filteredPredictions.last) {
+                        objects += ", "
+                    }
+                }
+                
+                let nowDate = Date()
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "HHmmss"
+                
+                var detectTime = dateFormatter.string(from: nowDate)
+                
+                print(objects)
+                print(detectTime
+                )
+                
+                let param = "\(Preference.defaultInstance.data ?? "")&objects={\(objects)}&detectTime=\(detectTime)"
+                print(param)
+                let paramData = param.data(using: .utf8)
+                
+                let url =  URL(string: "http://3.35.240.138:3333/object_detection")
+                guard let requestUrl = url else { fatalError() }
+                
+                var request = URLRequest(url: requestUrl)
+                request.httpMethod = "POST"
+                request.httpBody = paramData
+                
+                request.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+                request.setValue(String(paramData!.count), forHTTPHeaderField: "Content-Length")
+                
+                URLSession.shared.dataTask(with: request) { (data, response, error) in
+                    guard error == nil else { print(error!.localizedDescription); return }
+                    guard let data = data else { print("Empty data"); return }
+
+                    if let str = String(data: data, encoding: .utf8) {
+                        print(str)
+                    }
+                }.resume()
+                
+                
+                
+            }
+            
+
+            DispatchQueue.main.async {
                 self.isInferencing = false
             }
         } else {

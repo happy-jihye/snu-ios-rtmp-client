@@ -20,7 +20,7 @@
                         <rect key="frame" x="0.0" y="0.0" width="414" height="896"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="Gme-VA-sgd" customClass="MTHKView" customModule="HaishinKit">
+                            <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="Gme-VA-sgd">
                                 <rect key="frame" x="0.0" y="0.0" width="414" height="896"/>
                                 <subviews>
                                     <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="LTk-1V-jZa">
@@ -67,8 +67,8 @@
                     <tabBarItem key="tabBarItem" title="Recording" image="first" id="acW-dT-cKf" userLabel="Recording"/>
                     <navigationItem key="navigationItem" id="GiZ-dW-EDI"/>
                     <connections>
-                        <outlet property="lfView" destination="Gme-VA-sgd" id="lgg-bN-G69"/>
                         <outlet property="publishButton" destination="kaV-Nf-KmS" id="6yv-vb-8Vp"/>
+                        <outlet property="videoPreview" destination="Gme-VA-sgd" id="jB6-xw-z7F"/>
                     </connections>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="W5J-7L-Pyd" sceneMemberID="firstResponder"/>
